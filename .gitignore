@@ -1,0 +1,10 @@
+build/
+LULESH/
+test_*
+!tests/*.cpp
+!tests/*.py
+.vscode/
+.DS_Store
+*.o
+*.so
+*.a
