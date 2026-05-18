@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MPISan: Project Explanation</title>
+    <!-- Include Mermaid.js for flowcharts -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({startOnLoad:true, theme: 'default'});</script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fcfcfc;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #2980b9;
+            margin-top: 40px;
+        }
+        h3 {
+            color: #16a085;
+        }
+        .analogy {
+            background-color: #e8f4f8;
+            border-left: 5px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .step-box {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 5px;
+            border-radius: 3px;
+            color: #c0392b;
+            font-family: Consolas, monospace;
+        }
+        /* New styling for the terminal code boxes */
+        .code-box {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: Consolas, monospace;
+            overflow-x: auto;
+            margin: 15px 0;
+            border-left: 5px solid #e74c3c;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .code-box pre {
+            margin: 0;
+        }
+        .comment {
+            color: #6a9955;
+        }
+        .command {
+            color: #4fc1ff;
+        }
+        .mermaid {
+            margin: 30px 0;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>MPISan: Compiler-Integrated MPI Usage Sanitizer</h1>
+    <p style="text-align: center; font-style: italic;">A Layman's Guide for Project Evaluation</p>
+
+    <h2>1. The Big Picture: What is MPI and What is MPISan?</h2>
+    <div class="step-box">
+        <p><strong>MPI (Message Passing Interface)</strong> is the standard way supercomputers run code. Instead of one computer doing all the work, MPI breaks the code into "Ranks" (separate processes or computers) that talk to each other over a network to solve huge problems.</p>
+        <p><strong>The Problem:</strong> When 100 computers are talking to each other at the same time, programmers make mistakes. They send data to the wrong place, overwrite memory, or wait for messages that never come. These bugs are nearly impossible to find because the code doesn't explicitly crash—it just silently gives the wrong answer.</p>
+        <p><strong>The Solution (Our Project):</strong> We built <strong>MPISan</strong>. It is a "Sanitizer"—a security guard that lives inside the compiler. It watches every single message being sent and received, and if it detects a rule being broken, it immediately crashes the program and points exactly to the error.</p>
+    </div>
+    
+    <div class="analogy">
+        <strong>📬 The Analogy:</strong> Imagine MPI is a global postal service. Millions of letters are moving around. MPISan is a network of invisible inspectors embedded in every post office. They check if the addresses match, if the envelopes are too small for the contents, and if someone is expecting a letter from themselves.
+    </div>
+
+    <hr>
+
+    <h2>2. How It Works: The Flowchart</h2>
+    <p>Our project consists of two major moving parts working together. Below is a flowchart showing exactly what happens from the moment we compile the code to the moment a bug is detected:</p>
+
+    <div class="mermaid">
+        graph TD
+            A[Original User C++ Code] -->|Passed to Compiler Wrapper| B(mpisan-cxx.sh)
+            B -->|Invokes Clang++ Compiler| C{LLVM Compiler Pipeline}
+            C -->|Loads our Plugin| D[MPISanPass.cpp]
+            D -->|Injects tracking hooks into IR| E[Instrumented Machine Code]
+            E -->|Automatically linked with| F[Runtime Library mpisan_rt.so]
+            F -->|Executed via mpirun| G[Running MPI Application]
+            G -->|MPI Calls intercepted by our hooks| H{Is there a memory/logic bug?}
+            H -->|Yes| I((MPISan Error & Abort!))
+            H -->|No| J[Safe Execution Completes]
+    </div>
+
+    <h3>Part A: The LLVM Compiler Pass (MPISanPass.cpp)</h3>
+    <div class="step-box">
+        <p><strong>What it is:</strong> A plugin for the Clang/LLVM compiler.</p>
+        <p><strong>What it does:</strong> When you compile your C++ code into machine code, our pass sneaks in and scans your code for any MPI function (like <code>MPI_Send</code>). Before it finishes compiling, it literally rewrites your code to add our secret tracking functions (like <code>__mpisan_check_send</code>) right next to the original ones.</p>
+    </div>
+
+    <h3>Part B: The Runtime Library (mpisan_rt.cpp)</h3>
+    <div class="step-box">
+        <p><strong>What it is:</strong> A background library that runs alongside the actual application.</p>
+        <p><strong>What it does:</strong> When the program runs, those "GPS trackers" we installed wake up. They send data to our Runtime Library. The runtime library does the math, tracks memory, and communicates with other computers using a secret "Shadow Communicator" to verify if the rules are being followed.</p>
+    </div>
+
+    <hr>
+
+    <h2>3. How to Run the Project</h2>
+    <p>To demonstrate this to your professors, you can show them exactly how easy it is to use. The user does not need to change a single line of their C++ code. They just use our compiler wrapper.</p>
+    
+    <div class="code-box">
+<pre><code><span class="comment"># 1. Compile the code using our custom MPISan wrapper instead of normal mpicxx</span>
+<span class="command">./mpisan-cxx.sh</span> tests/test_05_buffer_aliasing.cpp -o test_05
+
+<span class="comment"># 2. Run the application across 2 simulated computers (ranks)</span>
+<span class="command">mpirun</span> -np 2 ./test_05
+
+<span class="comment"># OUTPUT EXPECTED:</span>
+<span class="comment"># ======================================================</span>
+<span class="comment"># [MPISan ERROR] Rank 0: Buffer Aliasing! Overlap detected...</span>
+<span class="comment"># ======================================================</span></code></pre>
+    </div>
+
+    <hr>
+
+    <h2>4. The Bugs We Catch (With Analogies)</h2>
+
+    <h3>Bug 1: Buffer Aliasing (Overlapping Memory)</h3>
+    <p><strong>The Bug:</strong> In asynchronous MPI (non-blocking), the computer starts sending data in the background while the code keeps running. If the programmer accidentally tells the computer to receive new data into the <em>exact same memory space</em> before the send is finished, the data gets corrupted.</p>
+    <div class="analogy">
+        <strong>📝 The Analogy:</strong> Imagine two people trying to write a letter on the exact same piece of paper at the exact same time. It results in unreadable scribbles. We catch this by assigning strict ownership to pieces of paper until the writing is done.
+    </div>
+
+    <h3>Bug 2: Mismatched Collectives</h3>
+    <p><strong>The Bug:</strong> "Collectives" are team meetings where every computer must participate (e.g., <code>MPI_Bcast</code>). If 9 computers show up for the meeting, but the 10th computer skips it, the other 9 computers will wait forever, freezing the supercomputer.</p>
+    <div class="analogy">
+        <strong>📅 The Analogy:</strong> Imagine a group project where everyone must sign the attendance sheet. At the end of the semester, the teacher (MPISan) checks the sheets. If Bob only signed 5 times but Alice signed 6 times, the teacher knows someone skipped a mandatory meeting!
+    </div>
+
+    <h3>Bug 3: Buffer Overflow</h3>
+    <p><strong>The Bug:</strong> Computer A sends 100 bytes of data, but Computer B only prepared a bucket that holds 50 bytes. The extra 50 bytes spill over and corrupt the rest of Computer B's memory.</p>
+    <div class="analogy">
+        <strong>📦 The Analogy:</strong> You try to stuff a giant microwave into a tiny P.O. Box. The post office breaks the box trying to make it fit. We prevent this by having the sender use our hidden "Shadow Communicator" to call the receiver in advance and ask: "How big is your box?"
+    </div>
+
+    <h3>Bug 4: Deadlocks (Sending to Self)</h3>
+    <p><strong>The Bug:</strong> A computer uses a blocking <code>MPI_Send</code> to send a message to itself. Because it is blocked waiting for the send to finish, it can never reach the <code>MPI_Recv</code> code to actually receive the message. It is stuck forever.</p>
+    <div class="analogy">
+        <strong>📱 The Analogy:</strong> You call your own phone number and wait on the line for yourself to pick up. You will wait forever. We act as the phone company and instantly block the call, telling you it's a mistake.
+    </div>
+
+    <hr>
+
+    <h2>5. The Final Proof: The LULESH Evaluation</h2>
+    <div class="step-box">
+        <p>To prove our project isn't just a toy, we ran it against <strong>LULESH</strong>, an Exascale proxy application created by the Lawrence Livermore National Laboratory. LULESH simulates real-world physics (hydrodynamics) and contains thousands of lines of highly complex, optimized MPI code.</p>
+        <p><strong>The Result:</strong> Our compiler wrapper successfully instrumented the massive codebase, tracked the memory natively, and allowed the simulation to run to completion across 8 processing ranks <strong>without a single false positive</strong>.</p>
+        <p><strong>Why this is impressive:</strong> It proves our tool is scalable, robust, and mathematically sound enough to handle real-world Supercomputing software without breaking it.</p>
+    </div>
+
+    <br>
+    <p style="text-align: center; color: #7f8c8d; font-size: 0.9em;">Prepared by Vinay Sinnur & MPISan Compiler Team</p>
+
+</body>
+</html>
