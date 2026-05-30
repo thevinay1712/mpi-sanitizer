@@ -24,21 +24,25 @@ struct MPISanPass : public PassInfoMixin<MPISanPass> {
                         if (CalledF && CalledF->hasName()) {
                             StringRef Name = CalledF->getName();
                             
-                            // Check for functions we intercept
-                            if (Name.starts_with("MPI_")) {
+                            // Check for functions we intercept (supports standard MPI_ and PMPI_ profiling wrappers)
+                            if (Name.starts_with("MPI_") || Name.starts_with("PMPI_")) {
+                                StringRef BaseName = Name;
+                                if (Name.starts_with("PMPI_")) {
+                                    BaseName = Name.substr(1); // Strip the 'P' prefix -> "MPI_..."
+                                }
                                 
                                 bool injectAfter = false;
                                 StringRef HookName = "";
                                 
-                                if (Name == "MPI_Init") { HookName = "__mpisan_init"; injectAfter = true; }
-                                else if (Name == "MPI_Finalize") { HookName = "__mpisan_finalize"; }
-                                else if (Name == "MPI_Send") { HookName = "__mpisan_check_send"; }
-                                else if (Name == "MPI_Recv") { HookName = "__mpisan_check_recv"; }
-                                else if (Name == "MPI_Bcast") { HookName = "__mpisan_check_bcast"; }
-                                else if (Name == "MPI_Reduce") { HookName = "__mpisan_check_reduce"; }
-                                else if (Name == "MPI_Isend") { HookName = "__mpisan_check_isend"; injectAfter = true; }
-                                else if (Name == "MPI_Irecv") { HookName = "__mpisan_check_irecv"; injectAfter = true; }
-                                else if (Name == "MPI_Wait") { HookName = "__mpisan_check_wait"; injectAfter = true; }
+                                if (BaseName == "MPI_Init") { HookName = "__mpisan_init"; injectAfter = true; }
+                                else if (BaseName == "MPI_Finalize") { HookName = "__mpisan_finalize"; }
+                                else if (BaseName == "MPI_Send") { HookName = "__mpisan_check_send"; }
+                                else if (BaseName == "MPI_Recv") { HookName = "__mpisan_check_recv"; }
+                                else if (BaseName == "MPI_Bcast") { HookName = "__mpisan_check_bcast"; }
+                                else if (BaseName == "MPI_Reduce") { HookName = "__mpisan_check_reduce"; }
+                                else if (BaseName == "MPI_Isend") { HookName = "__mpisan_check_isend"; injectAfter = true; }
+                                else if (BaseName == "MPI_Irecv") { HookName = "__mpisan_check_irecv"; injectAfter = true; }
+                                else if (BaseName == "MPI_Wait") { HookName = "__mpisan_check_wait"; injectAfter = true; }
                                 
                                 if (!HookName.empty()) {
                                     IRBuilder<> Builder(Call);

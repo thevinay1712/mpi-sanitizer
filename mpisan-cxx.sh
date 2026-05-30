@@ -10,14 +10,14 @@ export OMPI_CXX=clang++
 export MPICH_CXX=clang++
 COMPILER=mpicxx
 
-PASS_SO="$DIR/build/pass/libMPISanPass.so"
-RT_LIB="$DIR/build/runtime"
+PASS_SO="$DIR/build/src/pass/libMPISanPass.so"
+RT_LIB="$DIR/build/src/runtime"
 
 if [ ! -f "$PASS_SO" ]; then
-    PASS_SO="$DIR/build/pass/MPISanPass.so"
+    PASS_SO="$DIR/build/src/pass/MPISanPass.so"
 fi
 if [ ! -f "$PASS_SO" ]; then
-    PASS_SO="$DIR/build/pass/libMPISanPass.dylib"
+    PASS_SO="$DIR/build/src/pass/libMPISanPass.dylib"
 fi
 
 if [ ! -f "$PASS_SO" ]; then

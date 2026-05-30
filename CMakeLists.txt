@@ -20,5 +20,5 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Subdirectories
-add_subdirectory(pass)
-add_subdirectory(runtime)
+add_subdirectory(src/pass)
+add_subdirectory(src/runtime)
