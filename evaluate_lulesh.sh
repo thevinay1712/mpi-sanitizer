@@ -29,7 +29,7 @@ echo "=========================================="
 echo " Running LULESH with MPISan (8 ranks)"
 echo "=========================================="
 # Run it with 8 ranks and small iteration counts so it finishes quickly
-mpirun -np 8 ./lulesh2.0 -i 5 -s 10
+mpirun --oversubscribe -np 8 ./lulesh2.0 -i 5 -s 10
 
 echo "=========================================="
 echo " LULESH Evaluation Complete!"

@@ -4,8 +4,6 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-# Tell the MPI wrapper to use clang++ underneath so our LLVM pass works,
-# while automatically linking the correct mpi.h and MPI libraries!
 export OMPI_CXX=clang++
 export MPICH_CXX=clang++
 COMPILER=mpicxx
@@ -25,5 +23,19 @@ if [ ! -f "$PASS_SO" ]; then
     exit 1
 fi
 
-# We add -Wl,-rpath,$RT_LIB so the Linux loader knows exactly where to find our runtime library!
-$COMPILER -fpass-plugin=$PASS_SO -L$RT_LIB -Wl,-rpath,$RT_LIB -lmpisan_rt "$@"
+# Check if this is a compile-only step
+COMPILE_ONLY=0
+for arg in "$@"; do
+    if [ "$arg" == "-c" ] || [ "$arg" == "-E" ] || [ "$arg" == "-S" ]; then
+        COMPILE_ONLY=1
+        break
+    fi
+done
+
+if [ $COMPILE_ONLY -eq 1 ]; then
+    # Do not pass linker flags during compile-only steps
+    $COMPILER -fpass-plugin=$PASS_SO "$@"
+else
+    # Pass both the plugin and the runtime linking flags
+    $COMPILER -fpass-plugin=$PASS_SO -L$RT_LIB -Wl,-rpath,$RT_LIB -lmpisan_rt "$@"
+fi

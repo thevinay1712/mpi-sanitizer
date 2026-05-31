@@ -6,29 +6,27 @@
 #include <map>
 #include <vector>
 #include <algorithm>
+#include <execinfo.h>
+#include <unistd.h>
 
 namespace {
     int g_my_rank = -1;
     int g_comm_size = -1;
     bool g_is_initialized = false;
-    std::mutex g_rt_mutex; // Thread safety
+    std::mutex g_rt_mutex;
     MPI_Comm g_sanitizer_comm;
 
-    // Buffer tracking for async calls
     struct ActiveBuffer {
         const void* ptr;
         size_t size;
         bool is_write;
     };
-    // Map from Request to Buffer Info
     std::map<MPI_Request*, ActiveBuffer> g_active_requests;
 
-    // Collective history tracking
     std::vector<int> g_collective_history;
     const int COLL_BCAST = 1;
     const int COLL_REDUCE = 2;
 
-    // Communication event for type and size checking at finalization
     struct CommEvent {
         int type;      // 0 = Send, 1 = Recv
         int peer;      // dest or source
@@ -51,6 +49,18 @@ namespace {
     void report_error(const std::string &msg) {
         std::cerr << "\n======================================================\n";
         std::cerr << "[MPISan ERROR] Rank " << g_my_rank << ": " << msg << "\n";
+        
+        std::cerr << "\n--- Call Stack ---\n";
+        void* callstack[128];
+        int frames = backtrace(callstack, 128);
+        char** strs = backtrace_symbols(callstack, frames);
+        if (strs) {
+            for (int i = 1; i < frames; ++i) {
+                std::cerr << strs[i] << "\n";
+            }
+            free(strs);
+        }
+        
         std::cerr << "======================================================\n" << std::endl;
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
@@ -66,8 +76,6 @@ namespace {
     void register_async_buffer(MPI_Request* req, const void* buf, size_t size, bool is_write) {
         for (const auto& pair : g_active_requests) {
             if (check_overlap(pair.second.ptr, pair.second.size, buf, size)) {
-                // In MPI, overlapping reads (two Isends) are perfectly safe!
-                // Overlap is only illegal if at least one operation is writing (Irecv).
                 if (is_write || pair.second.is_write) {
                     report_error("Buffer Aliasing! Overlap detected in asynchronous MPI operations.");
                 }
@@ -84,6 +92,11 @@ void __mpisan_init(int *argc, char ***argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &g_my_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &g_comm_size);
     MPI_Comm_dup(MPI_COMM_WORLD, &g_sanitizer_comm);
+    
+    // Force OpenMPI to return errors instead of immediately aborting.
+    // This allows the program to reach __mpisan_finalize for type mismatch reporting.
+    MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
+    
     g_is_initialized = true;
 }
 
@@ -91,7 +104,7 @@ void __mpisan_finalize() {
     std::lock_guard<std::mutex> lock(g_rt_mutex);
     if (!g_is_initialized) return;
     
-    // Collective Verification: Gather total collective calls from all ranks
+    // 1. Mismatched Collectives Check
     int num_colls = g_collective_history.size();
     int* all_counts = new int[g_comm_size];
     
@@ -107,7 +120,7 @@ void __mpisan_finalize() {
     }
     delete[] all_counts;
 
-    // --- Dynamic Point-to-Point Type & Size Matching Engine ---
+    // 2. Global Point-to-Point Type & Overflow Matching
     if (g_comm_size > 1) {
         if (g_my_rank > 0) {
             int num_events = g_comm_history.size();
@@ -116,11 +129,9 @@ void __mpisan_finalize() {
                 MPI_Send(g_comm_history.data(), num_events * sizeof(CommEvent), MPI_BYTE, 0, 999, g_sanitizer_comm);
             }
         } else {
-            // Rank 0 collects all records
             std::vector<GlobalCommEvent> all_sends;
             std::vector<GlobalCommEvent> all_recvs;
 
-            // Load Rank 0's own events
             for (const auto& ev : g_comm_history) {
                 if (ev.type == 0) {
                     all_sends.push_back({0, ev.type, ev.peer, ev.tag, ev.count, ev.type_size, false});
@@ -129,7 +140,6 @@ void __mpisan_finalize() {
                 }
             }
 
-            // Receive from other ranks
             for (int i = 1; i < g_comm_size; ++i) {
                 int num_events = 0;
                 MPI_Recv(&num_events, 1, MPI_INT, i, 999, g_sanitizer_comm, MPI_STATUS_IGNORE);
@@ -146,15 +156,11 @@ void __mpisan_finalize() {
                 }
             }
 
-            // Simulate the MPI FIFO matching engine globally on Rank 0
             for (auto& snd : all_sends) {
-                // Find matching receive: FIFO unmatched receive with correct rank pair and tag
                 auto rcv_it = std::find_if(all_recvs.begin(), all_recvs.end(), [&](const GlobalCommEvent& rcv) {
                     if (rcv.matched) return false;
-                    // Rank matching (peer must match origin, taking MPI_ANY_SOURCE into account)
                     bool rank_matches = (rcv.origin_rank == snd.peer) && 
                                         (rcv.peer == snd.origin_rank || rcv.peer == MPI_ANY_SOURCE);
-                    // Tag matching (tag must match, taking MPI_ANY_TAG into account)
                     bool tag_matches = (rcv.tag == snd.tag) || (rcv.tag == MPI_ANY_TAG);
                     return rank_matches && tag_matches;
                 });
@@ -163,7 +169,6 @@ void __mpisan_finalize() {
                     snd.matched = true;
                     rcv_it->matched = true;
 
-                    // 1. Check for Type Mismatch (Base type size mismatch)
                     if (snd.type_size != rcv_it->type_size) {
                         std::string msg = "Type Mismatch! Rank " + std::to_string(snd.origin_rank) +
                                           " sent base type of " + std::to_string(snd.type_size) + " bytes, but Rank " +
@@ -172,7 +177,6 @@ void __mpisan_finalize() {
                         report_error(msg);
                     }
 
-                    // 2. Check for Buffer Overflow (Sent payload exceeds receiver's prepared buffer size)
                     int total_send_bytes = snd.count * snd.type_size;
                     int total_recv_bytes = rcv_it->count * rcv_it->type_size;
                     if (total_send_bytes > total_recv_bytes) {
@@ -253,4 +257,3 @@ void __mpisan_check_reduce(const void *sendbuf, void *recvbuf, int count, MPI_Da
 }
 
 }
-

@@ -7,11 +7,11 @@ echo "========================================"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 echo "Compiling test cases..."
-$DIR/mpisan-cxx.sh testcases/test_01_clean.cpp -o test_01
-$DIR/mpisan-cxx.sh testcases/test_03_send_to_self.cpp -o test_03
-$DIR/mpisan-cxx.sh testcases/test_08_async_write_aliasing.cpp -o test_08
-$DIR/mpisan-cxx.sh testcases/test_04_type_mismatch.cpp -o test_04
-$DIR/mpisan-cxx.sh testcases/test_02_null_buffer.cpp -o test_02
+$DIR/mpisan-cxx.sh -g testcases/test_01_clean.cpp -o test_01
+$DIR/mpisan-cxx.sh -g testcases/test_03_send_to_self.cpp -o test_03
+$DIR/mpisan-cxx.sh -g testcases/test_08_async_write_aliasing.cpp -o test_08
+$DIR/mpisan-cxx.sh -g testcases/test_04_type_mismatch.cpp -o test_04
+$DIR/mpisan-cxx.sh -g testcases/test_02_null_buffer.cpp -o test_02
 
 echo ""
 echo ">>> RUNNING WORKING CASE: Clean MPI Code (test_01)"
